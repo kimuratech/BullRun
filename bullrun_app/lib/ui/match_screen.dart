@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../features/simulation_provider.dart';
 import '../models/asset.dart';
 import '../models/portfolio.dart';
+import '../models/session.dart';
 import '../features/session_provider.dart';
 import 'animated_value.dart';
   ConsumerState<MatchScreen> createState() => _MatchScreenState();
@@ -14,6 +15,16 @@ class MatchScreen extends ConsumerStatefulWidget {
 }
 
 class _MatchScreenState extends ConsumerState<MatchScreen> {
+  Session? _lastSession;
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final session = ref.read(sessionProvider);
+    if (session != null && session != _lastSession) {
+      ref.read(simulationProvider).start(session, isMounted: () => mounted);
+      _lastSession = session;
+    }
+  }
   // Stub for transaction history widget
   Widget _buildTransactionHistory(List transactions) {
     return Card(
@@ -41,16 +52,72 @@ class _MatchScreenState extends ConsumerState<MatchScreen> {
   void _showTradeDialog(BuildContext context, List<Asset> assets, Portfolio portfolio) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Trade'),
-        content: const Text('Trade dialog placeholder.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
-          ),
-        ],
-      ),
+      builder: (context) {
+        final Map<Asset, double> tempAlloc = Map<Asset, double>.from(portfolio.allocations);
+        return StatefulBuilder(
+          builder: (context, setState) {
+            double total = tempAlloc.values.fold(0.0, (a, b) => a + b);
+            return AlertDialog(
+              title: const Text('Trade'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ...assets.map((asset) {
+                    return Row(
+                      children: [
+                        Expanded(child: Text(asset.displayName)),
+                        SizedBox(
+                          width: 80,
+                          child: Slider(
+                            value: tempAlloc[asset] ?? 0.0,
+                            min: 0.0,
+                            max: 1.0,
+                            divisions: 100,
+                            label: '${((tempAlloc[asset] ?? 0.0) * 100).toStringAsFixed(0)}%',
+                            onChanged: (v) {
+                              setState(() {
+                                tempAlloc[asset] = v;
+                              });
+                            },
+                          ),
+                        ),
+                        SizedBox(width: 8),
+                        Text('${((tempAlloc[asset] ?? 0.0) * 100).toStringAsFixed(0)}%'),
+                      ],
+                    );
+                  }),
+                  const SizedBox(height: 8),
+                  Text('Total: ${(total * 100).toStringAsFixed(0)}%', style: TextStyle(fontWeight: FontWeight.bold)),
+                  if ((total - 1.0).abs() > 0.01)
+                    const Text('Total must be 100%', style: TextStyle(color: Colors.red)),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: (total - 1.0).abs() > 0.01
+                      ? null
+                      : () {
+                          final newPortfolio = Portfolio(
+                            allocations: Map<Asset, double>.from(tempAlloc),
+                            value: portfolio.value,
+                          );
+                          ref.read(sessionProvider.notifier).state = ref.read(sessionProvider)!.copyWith(portfolio: newPortfolio);
+                          Navigator.pop(context);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Trade submitted!')),
+                          );
+                        },
+                  child: const Text('Submit'),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 
@@ -106,7 +173,6 @@ class _MatchScreenState extends ConsumerState<MatchScreen> {
       Asset(id: 'BOND', displayName: 'Bond ETF', baseVol: 0.1, drift: 0.0),
     ];
     final prices = ref.watch(pricesProvider);
-    final hasSession = session != null && portfolio != null;
     return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: AppBar(
@@ -337,7 +403,7 @@ class _MatchScreenState extends ConsumerState<MatchScreen> {
                                   const SizedBox(height: 12),
                                   ElevatedButton.icon(
                                     onPressed: () {
-                                      if (hasSession) {
+                                      if (session != null && portfolio != null) {
                                         final n = session.assets.length;
                                         final newAlloc = {for (var a in session.assets) a: 1.0 / n};
                                         final newPortfolio = Portfolio(
@@ -368,7 +434,7 @@ class _MatchScreenState extends ConsumerState<MatchScreen> {
                                   const SizedBox(height: 8),
                                   ElevatedButton.icon(
                                     onPressed: () {
-                                      if (hasSession) {
+                                      if (session != null && portfolio != null) {
                                         _showTradeDialog(context, session.assets, session.portfolio);
                                       } else {
                                         ScaffoldMessenger.of(context).showSnackBar(
@@ -388,7 +454,7 @@ class _MatchScreenState extends ConsumerState<MatchScreen> {
                                   const SizedBox(height: 8),
                                   ElevatedButton.icon(
                                     onPressed: () {
-                                      if (hasSession) {
+                                      if (session != null && portfolio != null) {
                                         final bond = session.assets.firstWhere((a) => a.id == 'BOND', orElse: () => session.assets.first);
                                         final alloc = Map<Asset, double>.from(session.portfolio.allocations);
                                         final totalOther = alloc.entries.where((e) => e.key != bond).fold(0.0, (sum, e) => sum + e.value);
@@ -422,7 +488,7 @@ class _MatchScreenState extends ConsumerState<MatchScreen> {
                                   const SizedBox(height: 8),
                                   ElevatedButton.icon(
                                     onPressed: () {
-                                      if (hasSession) {
+                                      if (session != null && portfolio != null) {
                                         final tech = session.assets.firstWhere((a) => a.id == 'EQ_TECH', orElse: () => session.assets.first);
                                         final alloc = Map<Asset, double>.from(session.portfolio.allocations);
                                         final totalOther = alloc.entries.where((e) => e.key != tech).fold(0.0, (sum, e) => sum + e.value);
@@ -456,7 +522,7 @@ class _MatchScreenState extends ConsumerState<MatchScreen> {
                                   const SizedBox(height: 8),
                                   ElevatedButton.icon(
                                     onPressed: () {
-                                      if (hasSession) {
+                                      if (session != null && portfolio != null) {
                                         final bond = session.assets.firstWhere((a) => a.id == 'BOND', orElse: () => session.assets.first);
                                         final alloc = {for (var a in session.assets) a: a == bond ? 1.0 : 0.0};
                                         final newPortfolio = Portfolio(
@@ -485,9 +551,15 @@ class _MatchScreenState extends ConsumerState<MatchScreen> {
                                   const SizedBox(height: 8),
                                   ElevatedButton.icon(
                                     onPressed: () {
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        const SnackBar(content: Text('Draft submitted! (No effect in MVP)')),
-                                      );
+                                      if (session != null && portfolio != null) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          const SnackBar(content: Text('Draft submitted! (No effect in MVP)')),
+                                        );
+                                      } else {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          const SnackBar(content: Text('No session loaded.')),
+                                        );
+                                      }
                                     },
                                     icon: const Icon(Icons.send),
                                     label: const Text('Submit Draft'),
