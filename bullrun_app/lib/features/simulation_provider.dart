@@ -2,7 +2,7 @@
 import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/session.dart';
-import '../models/asset.dart';
+// import '../models/asset.dart';
 import '../models/portfolio.dart';
 import '../services/market_simulator.dart';
 import 'session_provider.dart';

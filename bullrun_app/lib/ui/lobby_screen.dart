@@ -138,7 +138,7 @@ class _ModeCard extends StatelessWidget {
   final String label;
   final Color color;
   final VoidCallback onTap;
-  const _ModeCard({required this.icon, required this.label, required this.color, required this.onTap, Key? key}) : super(key: key);
+  const _ModeCard({required this.icon, required this.label, required this.color, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -148,11 +148,11 @@ class _ModeCard extends StatelessWidget {
         width: 90,
         height: 110,
         decoration: BoxDecoration(
-          color: color.withOpacity(0.9),
+          color: color.withAlpha((0.9 * 255).toInt()),
           borderRadius: BorderRadius.circular(18),
           boxShadow: [
             BoxShadow(
-              color: color.withOpacity(0.3),
+              color: color.withAlpha((0.3 * 255).toInt()),
               blurRadius: 12,
               offset: const Offset(0, 6),
             ),
