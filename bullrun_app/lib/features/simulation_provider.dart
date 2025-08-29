@@ -32,19 +32,20 @@ class SimulationController {
     _prices = {for (var a in session.assets) a.id: 100.0};
     _isMounted = isMounted;
     _timer?.cancel();
-    _timer = Timer.periodic(const Duration(seconds: 1), (_) => _tick(session));
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) => _tick());
   }
 
   void stop() {
     _timer?.cancel();
   }
 
-  void _tick(Session session) {
+  void _tick() {
     if (_isMounted == null || !_isMounted!()) {
       _timer?.cancel();
       return;
     }
     try {
+      final session = ref.read(sessionProvider)!;
       _prices = _simulator.nextPrices(_prices);
       // Update portfolio value (simple sum for now)
       double value = 0;
@@ -55,14 +56,7 @@ class SimulationController {
         allocations: session.portfolio.allocations,
         value: value,
       );
-      final updatedSession = Session(
-        id: session.id,
-        mode: session.mode,
-        assets: session.assets,
-        portfolio: updatedPortfolio,
-        startedAt: session.startedAt,
-        durationSeconds: session.durationSeconds,
-      );
+      final updatedSession = session.copyWith(portfolio: updatedPortfolio);
       ref.read(sessionProvider.notifier).state = updatedSession;
     } catch (e) {
       _timer?.cancel();
